@@ -1,49 +1,50 @@
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
-builder.Services.AddOpenApi();
+// builder.Services.AddOpenApi();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddOpenApiDocument();
 
 builder.AddNpgsqlDbContext<BloggingContext>(connectionName: "postgresdb");
 // builder.Services.AddDbContextPool<BloggingContext>(opt =>
 //     opt.UseNpgsql(builder.Configuration.GetConnectionString("BloggingContext")));
 
+builder.Services.AddAuthorization();
+builder
+    .Services
+    .AddIdentityApiEndpoints<IdentityUser>()
+    .AddEntityFrameworkStores<BloggingContext>();
+
+// builder.Services.AddEndpointsApiExplorer();
+
 var app = builder.Build();
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
-    app.MapOpenApi();
+    // app.MapOpenApi();
+    app.UseOpenApi();
+    app.UseSwaggerUi();
 }
 
 app.UseHttpsRedirection();
-
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
 
 app.MapGet("/weatherforecast", async (BloggingContext ctx) =>
 {
     var blog = await ctx.Blogs.FindAsync(1);
     return blog.Url;
-
-    // var forecast = Enumerable.Range(1, 5).Select(index =>
-    //     new WeatherForecast
-    //     (
-    //         DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-    //         Random.Shared.Next(-20, 55),
-    //         summaries[Random.Shared.Next(summaries.Length)]
-    //     ))
-    //     .ToArray();
-    // return forecast;
 })
-.WithName("GetWeatherForecast");
+.WithName("GetWeatherForecast")
+.RequireAuthorization();
 
-// app
-//     .MapGroup("/account")
-//     .MapIdentityApi<User>();
+app
+    .MapGroup("/account")
+    // .MapIdentityApi<User>();
+    .MapIdentityApi<IdentityUser>();
 
 using (var scope = app.Services.CreateScope())
 {
@@ -59,12 +60,7 @@ using (var scope = app.Services.CreateScope())
 
 app.Run();
 
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
-
-public class BloggingContext(DbContextOptions<BloggingContext> options) : DbContext(options)
+public class BloggingContext(DbContextOptions<BloggingContext> options) : IdentityDbContext<IdentityUser>(options)
 {
     public DbSet<Blog> Blogs { get; set; }
     public DbSet<Post> Posts { get; set; }
