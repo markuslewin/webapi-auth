@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -41,10 +42,21 @@ app.MapGet("/weatherforecast", async (BloggingContext ctx) =>
 .WithName("GetWeatherForecast")
 .RequireAuthorization();
 
-app
-    .MapGroup("/account")
+var accountGroup = app.MapGroup("/account");
+accountGroup
     // .MapIdentityApi<User>();
     .MapIdentityApi<IdentityUser>();
+accountGroup.MapPost(
+    "/logout",
+    async (SignInManager<IdentityUser> signInManager, [FromBody] object empty) =>
+    {
+        if (empty is null) return Results.Unauthorized();
+
+        await signInManager.SignOutAsync();
+        return Results.Ok();
+    })
+    .RequireAuthorization();
+
 
 using (var scope = app.Services.CreateScope())
 {
