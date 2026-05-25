@@ -46,8 +46,8 @@ app
         var blog = await ctx.Blogs.FindAsync(1);
         return blog.Url;
     })
-    .WithName("GetWeatherForecast")
-    .RequireAuthorization();
+    .WithName("GetWeatherForecast");
+    //.RequireAuthorization();
 
 
 app.MapPost("/register",

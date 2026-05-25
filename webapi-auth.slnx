@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="api/webapi-auth.csproj" />
+  <Project Path="AppHost/AppHost.csproj" />
+</Solution>
