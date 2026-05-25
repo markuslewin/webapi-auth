@@ -1,6 +1,10 @@
+using System.ComponentModel.DataAnnotations;
+using System.Text;
+using System.Text.Encodings.Web;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
-using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -18,7 +22,7 @@ builder.AddNpgsqlDbContext<BloggingContext>(connectionName: "postgresdb");
 builder.Services.AddAuthorization();
 builder
     .Services
-    .AddIdentityApiEndpoints<IdentityUser>()
+    .AddIdentityApiEndpoints<User>()
     .AddEntityFrameworkStores<BloggingContext>();
 
 // builder.Services.AddEndpointsApiExplorer();
@@ -34,29 +38,98 @@ if (app.Environment.IsDevelopment())
 
 app.UseHttpsRedirection();
 
-app.MapGet("/weatherforecast", async (BloggingContext ctx) =>
-{
-    var blog = await ctx.Blogs.FindAsync(1);
-    return blog.Url;
-})
-.WithName("GetWeatherForecast")
-.RequireAuthorization();
+var confirmEmailEndpointName = "ConfirmEmail";
 
-var accountGroup = app.MapGroup("/account");
-accountGroup
-    // .MapIdentityApi<User>();
-    .MapIdentityApi<IdentityUser>();
-accountGroup.MapPost(
-    "/logout",
-    async (SignInManager<IdentityUser> signInManager, [FromBody] object empty) =>
+app
+    .MapGet("/weatherforecast", async (BloggingContext ctx) =>
     {
-        if (empty is null) return Results.Unauthorized();
-
-        await signInManager.SignOutAsync();
-        return Results.Ok();
+        var blog = await ctx.Blogs.FindAsync(1);
+        return blog.Url;
     })
+    .WithName("GetWeatherForecast")
     .RequireAuthorization();
 
+
+app.MapPost("/register",
+    async Task<Results<Ok, ValidationProblem>> (
+        RegisterRequest registration,
+        UserManager<User> userManager,
+        IUserStore<User> userStore,
+        IEmailSender<User> emailSender,
+        LinkGenerator linkGenerator,
+        HttpContext httpContext) =>
+    {
+        var email = registration.Email;
+        if (string.IsNullOrEmpty(email) || !new EmailAddressAttribute().IsValid(email))
+        {
+            var error = userManager.ErrorDescriber.InvalidEmail(email);
+            return TypedResults.ValidationProblem(new Dictionary<string, string[]>
+            {
+                {error.Code, [error.Description]}
+            });
+        }
+
+        var user = new User
+        {
+            MyName = registration.FullName
+        };
+        await userStore.SetUserNameAsync(user, email, CancellationToken.None);
+        if (userStore is not IUserEmailStore<User> emailStore)
+        {
+            throw new Exception("Not an email store");
+        }
+        await emailStore.SetEmailAsync(user, email, CancellationToken.None);
+        var result = await userManager.CreateAsync(user, registration.Password);
+        if (!result.Succeeded)
+        {
+            return TypedResults.ValidationProblem(
+                result
+                    .Errors
+                    .GroupBy(e => e.Code, e => e.Description)
+                    .ToDictionary(g => g.Key, g => g.ToArray()));
+        }
+
+        var code = await userManager.GenerateEmailConfirmationTokenAsync(user);
+        var encoded = WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(code));
+        var userId = await userManager.GetUserIdAsync(user);
+        var confirmEmailUrl = linkGenerator.GetUriByName(httpContext, confirmEmailEndpointName, new RouteValueDictionary
+        {
+            ["userId"] = userId,
+            ["code"] = encoded
+        }) ?? throw new Exception($"Could not find endpoint named '{confirmEmailEndpointName}'.");
+        await emailSender.SendConfirmationLinkAsync(user, email, HtmlEncoder.Default.Encode(confirmEmailUrl));
+        Console.WriteLine($"Sent email with confirmation link '{confirmEmailUrl}'");
+
+        return TypedResults.Ok();
+    });
+
+app
+    .MapGet("/confirmEmail", async (string userId, string code, UserManager<User> userManager) =>
+    {
+        var user = await userManager.FindByIdAsync(userId);
+        if (user is null)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        string? decoded = null;
+        try
+        {
+            decoded = Encoding.UTF8.GetString(WebEncoders.Base64UrlDecode(code));
+        }
+        catch (FormatException)
+        {
+            return TypedResults.Unauthorized();
+        }
+        var result = await userManager.ConfirmEmailAsync(user, decoded);
+        if (!result.Succeeded)
+        {
+            return TypedResults.Unauthorized();
+        }
+
+        return Results.Ok();
+    })
+    .WithName(confirmEmailEndpointName);
 
 using (var scope = app.Services.CreateScope())
 {
@@ -72,7 +145,7 @@ using (var scope = app.Services.CreateScope())
 
 app.Run();
 
-public class BloggingContext(DbContextOptions<BloggingContext> options) : IdentityDbContext<IdentityUser>(options)
+public class BloggingContext(DbContextOptions<BloggingContext> options) : IdentityDbContext<User>(options)
 {
     public DbSet<Blog> Blogs { get; set; }
     public DbSet<Post> Posts { get; set; }
@@ -96,7 +169,14 @@ public class Post
     public Blog Blog { get; set; }
 }
 
-class User
+public class User : IdentityUser
 {
-    public string? Name { get; set; }
+    public string MyName { get; set; }
+}
+
+public class RegisterRequest
+{
+    public required string FullName { get; set; }
+    public required string Email { get; set; }
+    public required string Password { get; set; }
 }

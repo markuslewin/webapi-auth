@@ -1,0 +1,20 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "aspire",
+      "request": "launch",
+      "name": "Aspire: Launch default AppHost",
+      "program": "${workspaceFolder}",
+      "debuggers": {
+        "project": {
+          "justMyCode": false,
+          "symbolOptions": {
+            "searchMicrosoftSymbolServer": true
+          },
+          "suppressJITOptimizations": true
+        }
+      }
+    }
+  ]
+}
