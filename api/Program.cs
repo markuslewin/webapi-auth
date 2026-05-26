@@ -1,11 +1,11 @@
-using System.ComponentModel.DataAnnotations;
-using System.Text;
-using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
+using System.ComponentModel.DataAnnotations;
+using System.Text;
+using System.Text.Encodings.Web;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -46,8 +46,8 @@ app
         var blog = await ctx.Blogs.FindAsync(1);
         return blog.Url;
     })
-    .WithName("GetWeatherForecast");
-    //.RequireAuthorization();
+    .WithName("GetWeatherForecast")
+    .RequireAuthorization();
 
 
 app.MapPost("/register",
@@ -131,6 +131,17 @@ app
     })
     .WithName(confirmEmailEndpointName);
 
+app.MapPost("/login", async Task<Results<EmptyHttpResult, ProblemHttpResult>> (LoginRequest login, SignInManager<User> signInManager) =>
+{
+    var result = await signInManager.PasswordSignInAsync(login.Email, login.Password, isPersistent: true, lockoutOnFailure: true);
+    if (!result.Succeeded)
+    {
+        return TypedResults.Problem(result.ToString(), statusCode: StatusCodes.Status401Unauthorized);
+    }
+
+    return TypedResults.Empty;
+});
+
 using (var scope = app.Services.CreateScope())
 {
     var ctx = scope.ServiceProvider.GetRequiredService<BloggingContext>();
@@ -177,6 +188,12 @@ public class User : IdentityUser
 public class RegisterRequest
 {
     public required string FullName { get; set; }
+    public required string Email { get; set; }
+    public required string Password { get; set; }
+}
+
+public class LoginRequest
+{
     public required string Email { get; set; }
     public required string Password { get; set; }
 }

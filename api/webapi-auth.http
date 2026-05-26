@@ -1,6 +1,29 @@
 @webapi_auth_HostAddress = http://localhost:5103
+@fullName=user123
+@email=user123@example.com
+@password=P@ssw0rd
 
 GET {{webapi_auth_HostAddress}}/weatherforecast/
 Accept: application/json
 
 ###
+
+POST {{webapi_auth_HostAddress}}/register
+Content-Type: application/json
+
+{
+  "fullName": "{{fullName}}",
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+###
+
+# @name login
+POST {{webapi_auth_HostAddress}}/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
