@@ -1,13 +1,26 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+using Microsoft.AspNetCore.Identity.UI.Services;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using System.ComponentModel.DataAnnotations;
+using System.Security.Claims;
 using System.Text;
 using System.Text.Encodings.Web;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddAuthorization();
+
+builder.AddNpgsqlDbContext<BloggingContext>(connectionName: "postgresdb");
+// builder.Services.AddDbContextPool<BloggingContext>(opt =>
+//     opt.UseNpgsql(builder.Configuration.GetConnectionString("BloggingContext")));
+
+builder
+    .Services
+    .AddIdentityApiEndpoints<User>()
+    .AddEntityFrameworkStores<BloggingContext>();
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
@@ -15,19 +28,8 @@ var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddOpenApiDocument();
 
-builder.AddNpgsqlDbContext<BloggingContext>(connectionName: "postgresdb");
-// builder.Services.AddDbContextPool<BloggingContext>(opt =>
-//     opt.UseNpgsql(builder.Configuration.GetConnectionString("BloggingContext")));
-
-builder.Services.AddAuthorization();
-builder
-    .Services
-    .AddIdentityApiEndpoints<User>()
-    .AddEntityFrameworkStores<BloggingContext>();
-
-// builder.Services.AddEndpointsApiExplorer();
-
 var app = builder.Build();
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
@@ -41,14 +43,13 @@ app.UseHttpsRedirection();
 var confirmEmailEndpointName = "ConfirmEmail";
 
 app
-    .MapGet("/weatherforecast", async (BloggingContext ctx) =>
+    .MapGet("/weatherforecast", async (BloggingContext ctx, HttpRequest httpRequest, ClaimsPrincipal claimsPrincipal) =>
     {
         var blog = await ctx.Blogs.FindAsync(1);
         return blog.Url;
     })
     .WithName("GetWeatherForecast")
     .RequireAuthorization();
-
 
 app.MapPost("/register",
     async Task<Results<Ok, ValidationProblem>> (
@@ -142,6 +143,77 @@ app.MapPost("/login", async Task<Results<EmptyHttpResult, ProblemHttpResult>> (L
     return TypedResults.Empty;
 });
 
+app.MapPost("/forgotPassword", async (
+    ForgotPasswordRequest forgotPasswordRequest,
+    UserManager<User> userManager,
+    IEmailSender<User> emailSender) =>
+    {
+        // Don't leak data; return the same response for all paths
+        var response = TypedResults.Ok();
+
+        var user = await userManager.FindByEmailAsync(forgotPasswordRequest.Email);
+        if (user is null)
+        {
+            return response;
+        }
+
+        var isEmailConfirmed = await userManager.IsEmailConfirmedAsync(user);
+        if (!isEmailConfirmed)
+        {
+            return response;
+        }
+
+        var code = await userManager.GeneratePasswordResetTokenAsync(user);
+        var encoded = HtmlEncoder.Default.Encode(WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(code)));
+        await emailSender.SendPasswordResetCodeAsync(user, forgotPasswordRequest.Email, encoded);
+        Console.WriteLine($"Sent email with reset code '{encoded}'");
+        
+        return response;
+    });
+
+app.MapPost("/resetPassword", async Task<Results<Ok, ValidationProblem>> (
+    ResetPasswordRequest resetPasswordRequest,
+    UserManager<User> userManager,
+    IEmailSender<User> emailSender) =>
+    {
+        // Don't leak data; return the same error for all error responses
+        var error = userManager.ErrorDescriber.InvalidToken();
+        var errorResponse = TypedResults.ValidationProblem(new Dictionary<string, string[]>
+        {
+            { error.Code, [error.Description] }
+        });
+
+        var user = await userManager.FindByEmailAsync(resetPasswordRequest.Email);
+        if (user is null)
+        {
+            return errorResponse;
+        }
+
+        var isEmailConfirmed = await userManager.IsEmailConfirmedAsync(user);
+        if (!isEmailConfirmed)
+        {
+            return errorResponse;
+        }
+
+        string decoded;
+        try
+        {
+            decoded = Encoding.UTF8.GetString(WebEncoders.Base64UrlDecode(resetPasswordRequest.Code));
+        }
+        catch (FormatException)
+        {
+            return errorResponse;
+        }
+
+        var result = await userManager.ResetPasswordAsync(user, decoded, resetPasswordRequest.Password);
+        if (!result.Succeeded)
+        {
+            return errorResponse;
+        }
+
+        return TypedResults.Ok();
+    });
+
 using (var scope = app.Services.CreateScope())
 {
     var ctx = scope.ServiceProvider.GetRequiredService<BloggingContext>();
@@ -195,5 +267,17 @@ public class RegisterRequest
 public class LoginRequest
 {
     public required string Email { get; set; }
+    public required string Password { get; set; }
+}
+
+public class ForgotPasswordRequest
+{
+    public required string Email { get; set; }
+}
+
+public class ResetPasswordRequest
+{
+    public required string Email { get; set; }
+    public required string Code { get; set; }
     public required string Password { get; set; }
 }

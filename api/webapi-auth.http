@@ -1,14 +1,14 @@
-@webapi_auth_HostAddress = http://localhost:5103
-@fullName=user123
-@email=user123@example.com
+@base = https://localhost:7185
+@fullName=user7185
+@email=user7185@example.com
 @password=P@ssw0rd
 
-GET {{webapi_auth_HostAddress}}/weatherforecast/
+GET {{base}}/weatherforecast
 Accept: application/json
 
 ###
 
-POST {{webapi_auth_HostAddress}}/register
+POST {{base}}/register
 Content-Type: application/json
 
 {
@@ -20,10 +20,32 @@ Content-Type: application/json
 ###
 
 # @name login
-POST {{webapi_auth_HostAddress}}/login
+POST {{base}}/login
 Content-Type: application/json
 
 {
   "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+###
+
+POST {{base}}/forgotPassword
+Content-Type: application/json
+
+{
+  "email": "{{email}}"
+}
+
+###
+
+@code=Q2ZESjhDd1NFUklZcUtCQ3MwWlF3MW9DbnptcnRZMW1wdmVsVTh4UmkrdFMyZ0tCelBZQkJKbFUvNUVyNktETlJQK1pjMWtZRGRQS3FTRDZHMmZTdis4TmJ0amtpcHBPckNuNkpRWVluZ2xVdEpLdmxUdGJ1UTJwKzJadm9iVjg5OEhUblBpZ1ZmUllUekRsRTZPRm5vNnU3SWk3cm5yV2tpSnp5dVE4ZGJBN1dydjEremVUelF6U0o0alNXMjljM0p5NmFGSGFQNHc1ZitLZlo0eE9lK2Z0bXcremx2QnJkNlpLenhFSjF5RnlBdkd6
+
+POST {{base}}/resetPassword
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "code": "{{code}}",
   "password": "{{password}}"
 }
