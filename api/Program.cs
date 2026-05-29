@@ -43,7 +43,7 @@ app.UseHttpsRedirection();
 var confirmEmailEndpointName = "ConfirmEmail";
 
 app
-    .MapGet("/weatherforecast", async (BloggingContext ctx, HttpRequest httpRequest, ClaimsPrincipal claimsPrincipal) =>
+    .MapGet("/weatherforecast", async (BloggingContext ctx, HttpRequest httpRequest, ClaimsPrincipal user) =>
     {
         var blog = await ctx.Blogs.FindAsync(1);
         return blog.Url;
@@ -213,6 +213,14 @@ app.MapPost("/resetPassword", async Task<Results<Ok, ValidationProblem>> (
 
         return TypedResults.Ok();
     });
+
+app
+    .MapPost("/logout", async (SignInManager<User> signInManager) =>
+    {
+        await signInManager.SignOutAsync();
+        return TypedResults.Ok();
+    })
+    .RequireAuthorization();
 
 using (var scope = app.Services.CreateScope())
 {

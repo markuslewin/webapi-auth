@@ -19,7 +19,6 @@ Content-Type: application/json
 
 ###
 
-# @name login
 POST {{base}}/login
 Content-Type: application/json
 
@@ -49,3 +48,7 @@ Content-Type: application/json
   "code": "{{code}}",
   "password": "{{password}}"
 }
+
+###
+
+POST {{base}}/logout
