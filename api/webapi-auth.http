@@ -52,3 +52,7 @@ Content-Type: application/json
 ###
 
 POST {{base}}/logout
+
+###
+
+POST {{base}}/claimBlog

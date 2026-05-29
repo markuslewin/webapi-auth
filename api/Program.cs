@@ -45,8 +45,24 @@ var confirmEmailEndpointName = "ConfirmEmail";
 app
     .MapGet("/weatherforecast", async (BloggingContext ctx, HttpRequest httpRequest, ClaimsPrincipal user) =>
     {
-        var blog = await ctx.Blogs.FindAsync(1);
-        return blog.Url;
+        var blog = await ctx
+            .Blogs
+            .Include(b => b.Owner)
+            .FirstAsync(b => b.BlogId == 1);
+        return new
+        {
+            blog.BlogId,
+            blog.Url,
+            Owner = blog.Owner is User owner
+                ? new
+                {
+                    owner.Id,
+                    owner.UserName,
+                    owner.Email,
+                    owner.MyName
+                }
+                : null
+        };
     })
     .WithName("GetWeatherForecast")
     .RequireAuthorization();
@@ -222,6 +238,17 @@ app
     })
     .RequireAuthorization();
 
+app
+    .MapPost("/claimBlog", async (ClaimsPrincipal principal, UserManager<User> userManager, BloggingContext ctx) =>
+    {
+        var user = await userManager.GetUserAsync(principal);
+        var blog = await ctx.Blogs.FindAsync(1);
+        blog.OwnerId = user.Id;
+        await ctx.SaveChangesAsync();
+        return TypedResults.Ok();
+    })
+    .RequireAuthorization();
+
 using (var scope = app.Services.CreateScope())
 {
     var ctx = scope.ServiceProvider.GetRequiredService<BloggingContext>();
@@ -248,6 +275,9 @@ public class Blog
     public string Url { get; set; }
 
     public List<Post> Posts { get; set; }
+
+    public string? OwnerId { get; set; }
+    public User? Owner { get; set; }
 }
 
 public class Post
